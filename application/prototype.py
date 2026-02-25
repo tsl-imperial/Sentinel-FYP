@@ -326,6 +326,7 @@ with tabs[0]:
         unsafe_allow_html=True,
     )
 
+
 # -----------------------------
 # TABS 2+: Map 2 per road-class
 # -----------------------------
