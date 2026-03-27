@@ -4,72 +4,92 @@
   <meta charset="utf-8" />
   <title>Ghana Roads — GEOINT Prototype</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
   <link rel="stylesheet" href="/static/styles.css"/>
 </head>
 <body>
   <header class="topbar">
-    <div class="title">Ghana Road Infrastructure Quality Explorer</div>
-    <div class="subtitle">GEE + OSM • GEOINT‑style interface</div>
+    <div>
+      <div class="eyebrow">Geoanalytics Dashboard</div>
+      <div class="title">Ghana Road Infrastructure Quality Explorer</div>
+      <div class="subtitle">Google Earth Engine + OpenStreetMap • Polygon-based road extraction and Sentinel-2 context</div>
+    </div>
+    <div class="topbar-badges">
+      <span class="badge">Operational</span>
+      <span class="badge badge-ghost">2026 Demo</span>
+    </div>
   </header>
 
   <section class="container">
-    <div class="panel">
+    <div class="panel controls-panel">
       <div class="panel-title">Controls</div>
 
-      <div class="panel-title">Road Classes (Map 1)</div>
-      <div id="map1-classes"></div>
-
-      <label>Region (Map 2)</label>
+      <div class="section-title">Scope</div>
+      <label>Region</label>
       <select id="region"></select>
 
-      <label>Road class (Map 2)</label>
-      <select id="road_class"></select>
+      <label>Output filename</label>
+      <input type="text" id="filename" value="map2_extract" />
 
-      <label>Year</label>
-      <input type="number" id="year" value="2023" min="2017" max="2025"/>
-
-      <label>Quarter</label>
-      <select id="quarter">
-        <option>Jan–Mar</option>
-        <option>Apr–Jun</option>
-        <option>Jul–Sep</option>
-        <option>Oct–Dec</option>
-      </select>
+      <div class="section-title">Sentinel-2 Settings</div>
+      <label>Time period (2020–2025)</label>
+      <input type="range" id="time_idx" min="0" max="23" step="1" value="12" />
+      <div id="time_label" class="small" style="margin-top:6px;">2023 Q1 (Jan–Mar)</div>
 
       <label>Max cloud (%)</label>
       <input type="number" id="cloud" value="30" min="0" max="90"/>
 
-      <label>Scale (m)</label>
-      <select id="scale">
-        <option>10</option>
-        <option selected>20</option>
-        <option>30</option>
-        <option>60</option>
-      </select>
+      <button id="clear_poly" type="button">Clear polygon</button>
+      <button id="download_poly" type="button">Download network + S2</button>
+      <div class="subtitle small" style="margin-top:8px;">
+        Drawing mode: click to add points, double-click to close polygon.
+      </div>
     </div>
 
     <div class="maps">
       <div class="map-card">
-        <div class="map-title">Map 1 — Ghana roads (Top 10, toggle layers)</div>
-        <div id="map1"></div>
-      </div>
-
-      <div class="map-card">
-        <div class="map-title">Map 2 — Region + class, click for stats</div>
-        <div id="map2"></div>
+        <div class="map-title">Operational Map — Region roads by class + polygon extraction</div>
+        <div id="main_map"></div>
       </div>
     </div>
 
-    <div class="panel">
-      <div class="panel-title">Selected road</div>
-      <pre id="results">{}</pre>
+    <div class="panel results-panel">
+      <div class="panel-title">Extraction Results</div>
+      <div class="result-cards">
+        <div class="result-card">
+          <div class="result-label">Road km</div>
+          <div id="kpi-road-km" class="result-value">-</div>
+        </div>
+        <div class="result-card">
+          <div class="result-label">Nodes</div>
+          <div id="kpi-nodes" class="result-value">-</div>
+        </div>
+        <div class="result-card">
+          <div class="result-label">Edges</div>
+          <div id="kpi-edges" class="result-value">-</div>
+        </div>
+      </div>
+      <div id="result-summary" class="result-summary">
+        Draw a polygon and run extraction to populate summary insights.
+      </div>
+      <div id="street-view-links" class="result-summary" style="margin-top:8px;"></div>
+      <div class="chart-wrap">
+        <canvas id="indicesChart"></canvas>
+      </div>
+      <details class="raw-details">
+        <summary>Raw JSON Output</summary>
+        <pre id="results">{}</pre>
+      </details>
 
       <div class="panel-title" style="margin-top:12px;">Metrics explanation</div>
       <div id="metrics"></div>
     </div>
   </section>
 
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="/static/app.js"></script>
 </body>

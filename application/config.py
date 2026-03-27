@@ -12,8 +12,13 @@ ROADS_RECLASS_ASSET = "projects/sentinel-487715/assets/roads_reclassified"
 REGIONS_FC_ID = "projects/sat-io/open-datasets/WORLD-BANK/WBGAD/WB_GAD_ADM1"
 
 TOP10 = [
-    "residential", "service", "unclassified", "path", "track",
-    "tertiary", "footway", "secondary", "trunk", "primary",
+    "residential",
+    "service",
+    "unclassified",
+    "tertiary",
+    "secondary",
+    "trunk",
+    "primary",
 ]
 
 TABBED_CLASSES = ["residential", "primary", "secondary", "trunk", "tertiary", "unclassified"]
@@ -22,11 +27,12 @@ CLASS_COLORS = {
     "residential": "#1f77b4",
     "service": "#ff7f0e",
     "unclassified": "#d62728",
-    "path": "#9467bd",
-    "track": "#8c564b",
     "tertiary": "#e377c2",
-    "footway": "#17becf",
     "secondary": "#2ca02c",
     "trunk": "#bcbd22",
-    "primary": "#2F2F2F",
+    "primary": "#8F96A3",
+    "primary_link": "#5b6b7a",
+    "secondary_link": "#64b75a",
+    "tertiary_link": "#d07bb9",
+    "living_street": "#37b6ad",
 }
