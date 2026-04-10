@@ -1,0 +1,43 @@
+# Python
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+*.egg-info/
+.mypy_cache/
+
+# Node
+node_modules/
+.next/
+out/
+dist/
+*.tsbuildinfo
+
+# Env
+.env
+.env.local
+.env.*.local
+
+# OS / editor
+.DS_Store
+*.swp
+*.swo
+.idea/
+.vscode/
+
+# Project outputs (large data)
+outputs/
+cache/
+*.pkl
+*.tif
+
+# Earth Engine credentials
+.config/earthengine/
+
+# Test artefacts
+playwright-report/
+test-results/
+coverage/
+/.claude/skills/pptx

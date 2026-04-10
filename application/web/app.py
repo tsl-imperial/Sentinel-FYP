@@ -1,13 +1,16 @@
-# Flask backend (API only).
-# - Exposes routes like /api/overview_layers, /api/road_stats.
-# - Makes the logic available to any web UI.
-# - If you switch to another frontend, keep these endpoints or re‑implement them.
+# Network Inspector — Flask backend (API only).
+# - Exposes /api/* routes consumed by the Next.js frontend.
+# - Backend stays Python because geopandas/osmnx/earthengine-api are Python-only.
+# - The Next.js dev server proxies /api/* here via next.config.js rewrites.
 
-from flask import Flask, jsonify, request, render_template
+from flask import Flask, abort, jsonify, request, send_from_directory
+from flask_cors import CORS
+from werkzeug.utils import secure_filename
 import os
 import json
 import pickle
 from pathlib import Path
+from dotenv import load_dotenv
 import ee
 import geopandas as gpd
 import osmnx as ox
@@ -27,58 +30,114 @@ from application.logic.features import (
     nearest_road_feature,
     compute_road_stats_cached,
 )
+from application.web import local_data
 
-app = Flask(__name__, template_folder="templates", static_folder="static")
-init_ee()
+REPO_ROOT = Path(__file__).resolve().parents[2]
+load_dotenv(REPO_ROOT / ".env")
 
-OUTPUT_DIR = Path("/Users/miranda/Documents/GitHub/Sentinel-FYP/outputs")
+# Resolved at module import so pytest can monkeypatch the env var, reload
+# this module, and assert against the fresh value (regression tests R1-R4).
+OUTPUT_DIR = local_data.output_dir()
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
-@app.get("/")
-def index():
-    return render_template("index.html")
+app = Flask(__name__)
+
+# tests/conftest.py and CI set NETINSPECT_SKIP_EE_INIT=1 so the app module is
+# importable without Earth Engine credentials.
+if not os.environ.get("NETINSPECT_SKIP_EE_INIT"):
+    init_ee()
+
+# Dev CORS only matters for tools that bypass the Next.js rewrite (Playwright,
+# direct curl). In normal browser use the rewrite makes /api/* same-origin.
+if os.environ.get("NETINSPECT_DEV") == "1":
+    CORS(app, resources={r"/api/*": {"origins": [
+        "http://127.0.0.1:3000",
+        "http://localhost:3000",
+        "http://127.0.0.1:3666",
+        "http://localhost:3666",
+    ]}})
+
+
+@app.errorhandler(ee.ee_exception.EEException)
+def handle_ee_unavailable(exc):
+    return jsonify({
+        "error": str(exc),
+        "status": "earth_engine_unavailable",
+        "hint": (
+            "Run `earthengine authenticate` once, then comment NETINSPECT_SKIP_EE_INIT in .env. "
+            "Or wire the local data path (see TODOS.md)."
+        ),
+    }), 503
+
+
+@app.get("/api/healthz")
+def healthz():
+    """Liveness probe. Cheap, no external calls. Used by start.sh boot gating."""
+    return jsonify({"status": "ok"}), 200
+
+
+@app.get("/api/healthz/ready")
+def healthz_ready():
+    """Readiness probe. Verifies Earth Engine is reachable. Called once per boot or by CI."""
+    try:
+        ee.Number(1).getInfo()
+        return jsonify({"status": "ok", "ee_project": config.EE_PROJECT}), 200
+    except Exception as exc:
+        return jsonify({"status": "degraded", "error": str(exc)}), 503
 
 @app.get("/api/regions")
 def regions():
-    return jsonify(["Ghana"] + list_regions_ghana())
+    """List of Ghana administrative regions, served from data/roads_region_lookup.csv.
 
-@app.get("/api/overview_layers")
-def overview_layers():
-    region = request.args.get("region", "").strip()
-    layers = []
-    if region and region != "Ghana":
-        region_geom, _ = region_geom_center(region)
-        if region_geom is None:
-            return jsonify({"error": "region not found"}), 404
-        target_geom = region_geom
-    else:
-        target_geom = ee.FeatureCollection("USDOS/LSIB_SIMPLE/2017").filter(
-            ee.Filter.eq("country_na", "Ghana")
-        ).geometry()
+    'Ghana' is a synthetic entry for the whole-country view.
+    """
+    try:
+        return jsonify(local_data.list_regions())
+    except FileNotFoundError as exc:
+        return jsonify({"error": str(exc), "status": "data_missing"}), 503
 
-    for cls in config.TOP10:
-        fc_cls = roads_fc_for_geom(target_geom, [cls], config.ROADS_ASSET)
-        painted = ee_fc_to_paint_image(fc_cls, color_hex=config.CLASS_COLORS[cls], width=2).clip(target_geom)
-        layers.append({
-            "class": cls,
-            "color": config.CLASS_COLORS[cls],
-            "tile": ee_tile_layer(painted, {}),
-        })
-    return jsonify({"layers": layers})
 
 @app.get("/api/region_info")
 def region_info():
-    region = request.args.get("region", "")
-    if region == "Ghana":
-        ghana_geom = ee.FeatureCollection("USDOS/LSIB_SIMPLE/2017").filter(
-            ee.Filter.eq("country_na", "Ghana")
-        ).geometry()
-        cen = ghana_geom.centroid(1).coordinates().getInfo()
-        return jsonify({"center": [cen[1], cen[0]]})
-    geom, center = region_geom_center(region)
-    if geom is None:
+    """Center coordinates [lat, lng] for a region.
+
+    Computed from the bounds of all road geometries in the region (via the local
+    OSM shapefile + roads_region_lookup CSV). For 'Ghana' returns the country
+    centroid.
+    """
+    region = request.args.get("region", "").strip()
+    if not region:
+        return jsonify({"error": "region is required"}), 400
+    try:
+        lat, lng = local_data.region_center(region)
+        return jsonify({"center": [lat, lng]})
+    except ValueError:
         return jsonify({"error": "region not found"}), 404
-    return jsonify({"center": center})
+    except FileNotFoundError as exc:
+        return jsonify({"error": str(exc), "status": "data_missing"}), 503
+
+
+@app.get("/api/overview_layers")
+def overview_layers():
+    """Road class overlays for a region as GeoJSON FeatureCollections.
+
+    Response shape:
+        {"layers": [{"class": "trunk", "color": "#bcbd22",
+                     "geojson": <FeatureCollection>, "feature_count": N}, ...]}
+
+    Replaces the legacy GEE-tile rendering with native vector layers. Faster,
+    deterministic, no auth required. The frontend renders these via L.geoJSON.
+    """
+    region = request.args.get("region", "").strip()
+    if not region:
+        return jsonify({"error": "region is required"}), 400
+    try:
+        layers = local_data.overview_layers_for_region(region)
+        if not layers and region != "Ghana":
+            return jsonify({"error": "region not found"}), 404
+        return jsonify({"layers": layers})
+    except FileNotFoundError as exc:
+        return jsonify({"error": str(exc), "status": "data_missing"}), 503
 
 @app.get("/api/roads_layer")
 def roads_layer():
@@ -94,20 +153,7 @@ def roads_layer():
         if region_geom is None:
             return jsonify({"error": "region not found"}), 404
 
-    if road_class:
-        classes = [road_class]
-    else:
-        classes = [
-            "trunk",
-            "primary",
-            "secondary",
-            "tertiary",
-            "residential",
-            "service",
-            "unclassified",
-            "busway"
-        ]
-
+    classes = [road_class] if road_class else list(config.TOP10)
     fc_cls = roads_fc_for_geom(region_geom, classes, config.ROADS_ASSET)
     roads_img = ee_fc_to_paint_image(fc_cls, color_hex="#1f77b4", width=2).clip(region_geom)
     roads_url = ee_tile_layer(roads_img, {})
@@ -163,27 +209,54 @@ def road_stats():
         "geometry": nearest_info.get("geometry"),
     })
 
+@app.get("/api/regions/details")
+def regions_details():
+    """Per-region summaries + the canonical class palette/order.
+
+    The palette ships in the same payload so the frontend doesn't have its own
+    copy of the road class colors (which would drift from config.py).
+    """
+    try:
+        return jsonify({
+            "regions": list(local_data.region_summaries()),
+            "class_palette": local_data.class_palette(),
+        })
+    except FileNotFoundError as exc:
+        return jsonify({"error": str(exc), "status": "data_missing"}), 503
+
+
+@app.get("/api/exports")
+def exports_list():
+    return jsonify({"exports": local_data.list_export_files()})
+
+
+@app.get("/api/exports/file/<path:filename>")
+def exports_file(filename: str):
+    # secure_filename + the equality check ensures we never serve a path
+    # that wouldn't round-trip cleanly through the OS. send_from_directory
+    # also resolves the path safely as a second line of defence.
+    safe_name = secure_filename(filename)
+    if not safe_name or safe_name != filename:
+        abort(404)
+    return send_from_directory(OUTPUT_DIR, safe_name, as_attachment=True)
+
+
 @app.get("/api/boundary_layer")
 def boundary_layer():
-    region = request.args.get("region", "Ghana")
+    """Region outline as a GeoJSON Polygon.
 
-    if region == "Ghana":
-        geom = ee.FeatureCollection("USDOS/LSIB_SIMPLE/2017").filter(
-            ee.Filter.eq("country_na", "Ghana")
-        ).geometry()
-    else:
-        geom, _ = region_geom_center(region)
-        if geom is None:
+    Local-data implementation: returns the convex hull of all road geometries
+    in the region. Not the true admin polygon, but visually adequate as a
+    boundary indicator and requires no separate adm1 file.
+    """
+    region = request.args.get("region", "Ghana").strip()
+    try:
+        geojson = local_data.boundary_geojson_for_region(region)
+        if geojson is None:
             return jsonify({"error": "region not found"}), 404
-
-    outline_img = (
-        ee.Image()
-        .byte()
-        .paint(ee.FeatureCollection(geom), 1, 3)
-        .visualize(min=0, max=1, palette=["FFD000"])
-    )
-    outline_url = ee_tile_layer(outline_img, {})
-    return jsonify({"tile": outline_url})
+        return jsonify({"geojson": geojson})
+    except FileNotFoundError as exc:
+        return jsonify({"error": str(exc), "status": "data_missing"}), 503
 
 
 @app.get("/api/random_road_stats")
@@ -319,7 +392,7 @@ def export_polygon_network_s2():
 
     if not filename:
         return jsonify({"error": "filename is required"}), 400
-    safe_filename = "".join(ch for ch in filename if ch.isalnum() or ch in ("-", "_")).strip("_")
+    safe_filename = secure_filename(filename)
     if not safe_filename:
         return jsonify({"error": "invalid filename"}), 400
 
