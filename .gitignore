@@ -33,6 +33,9 @@ cache/
 *.pkl
 *.tif
 
+# Dev orchestrator logs (start.sh writes to _log/syslog-{flask,next}.log)
+_log/
+
 # Earth Engine credentials
 .config/earthengine/
 
