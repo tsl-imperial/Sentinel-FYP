@@ -34,7 +34,7 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SHAPEFILE = REPO_ROOT / "data" / "gis_osm_roads_free_1.shp"
-OUTPUT = REPO_ROOT / "application" / "web" / "server" / "public" / "tiles" / "ghana_roads.pmtiles"
+OUTPUT = REPO_ROOT / "frontend" / "public" / "tiles" / "ghana_roads.pmtiles"
 
 # Tippecanoe configuration. Tuned during the first real build:
 #   --minimum-zoom=4   Ghana fits inside zoom 4. Don't waste bytes at z 0-3.

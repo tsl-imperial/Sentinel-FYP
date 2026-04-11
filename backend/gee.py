@@ -5,7 +5,7 @@
 
 import functools
 import ee
-from application import config
+from backend import config
 
 _initialized = False
 

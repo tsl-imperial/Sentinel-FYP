@@ -17,20 +17,20 @@ import geopandas as gpd
 import osmnx as ox
 from igraph import Graph
 from shapely.geometry import Polygon, mapping
-from application import config
-from application.logic import (
+from backend import config
+from backend.gee import (
     init_ee,
     region_geom_center,
     roads_fc_for_geom,
 )
-from application.logic.features import (
+from backend.features import (
     adaptive_search_m,
     nearest_road_feature,
     compute_road_stats_cached,
 )
-from application.web import local_data
+from backend import local_data
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
+REPO_ROOT = Path(__file__).resolve().parents[1]
 load_dotenv(REPO_ROOT / ".env")
 
 # Resolved at module import so pytest can monkeypatch the env var, reload
@@ -152,7 +152,7 @@ def road_indices():
 def class_palette():
     """Road class color palette + canonical order.
 
-    Lightweight, sub-millisecond. Reads only from application.config.CLASS_COLORS via
+    Lightweight, sub-millisecond. Reads only from backend.config.CLASS_COLORS via
     local_data.class_palette() — does NOT touch the shapefile or trigger
     region_summaries(). The workbench gates its map mount on this endpoint, so it
     must stay fast (no shapefile load).
@@ -488,7 +488,7 @@ def export_polygon_network_s2():
         comp = s2.median()
         if comp is None:
             raise RuntimeError("No Sentinel-2 data for selected settings")
-        from application.logic.gee import s2_features
+        from backend.gee import s2_features
         feat_img = s2_features(comp)
         stats = feat_img.reduceRegion(
             reducer=ee.Reducer.mean(),

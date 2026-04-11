@@ -1,7 +1,7 @@
 """
 Network Inspector — pytest fixtures.
 
-CRITICAL: NETINSPECT_SKIP_EE_INIT must be set BEFORE importing application.web.app,
+CRITICAL: NETINSPECT_SKIP_EE_INIT must be set BEFORE importing backend.app,
 because app.py calls init_ee() at module import time. Without this guard, every
 test that needs the Flask app crashes on a CI machine that doesn't have GEE creds.
 """
@@ -34,9 +34,9 @@ def app(monkeypatch, tmp_path):
     monkeypatch.setenv("NETINSPECT_SKIP_EE_INIT", "1")
 
     # Force re-import so module-level OUTPUT_DIR / CORS pick up the patched env.
-    if "application.web.app" in sys.modules:
-        del sys.modules["application.web.app"]
-    from application.web import app as app_module
+    if "backend.app" in sys.modules:
+        del sys.modules["backend.app"]
+    from backend import app as app_module
 
     app_module.app.config.update(TESTING=True)
     yield app_module.app
@@ -50,7 +50,7 @@ def client(app):
 @pytest.fixture
 def mocked_ee(monkeypatch):
     """Replace ee.Number().getInfo() so /api/healthz/ready is testable without GEE."""
-    from application.web import app as app_module
+    from backend import app as app_module
 
     class _FakeNumber:
         def __init__(self, _v):
@@ -66,7 +66,7 @@ def mocked_ee(monkeypatch):
 @pytest.fixture
 def broken_ee(monkeypatch):
     """Simulate Earth Engine being unavailable for /api/healthz/ready."""
-    from application.web import app as app_module
+    from backend import app as app_module
 
     class _BrokenNumber:
         def __init__(self, _v):

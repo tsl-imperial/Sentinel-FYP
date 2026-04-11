@@ -5,7 +5,7 @@
 
 import ee
 import functools
-from application.logic import gee
+from backend import gee
 
 def adaptive_search_m(zoom: int | None) -> int:
     if zoom is None:

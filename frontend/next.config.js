@@ -5,7 +5,7 @@
 // Same-origin from the browser, no CORS needed in normal use.
 
 const path = require('path');
-require('dotenv').config({ path: path.join(__dirname, '../../../.env') });
+require('dotenv').config({ path: path.join(__dirname, '../.env') });
 
 /** @type {import('next').NextConfig} */
 // 127.0.0.1 (not localhost) — avoids IPv6 dual-stack DNS resolution issues on macOS.

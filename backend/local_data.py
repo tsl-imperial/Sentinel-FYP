@@ -26,10 +26,10 @@ import geopandas as gpd
 import pandas as pd
 from shapely.geometry import mapping
 
-from application import config
+from backend import config
 
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
+REPO_ROOT = Path(__file__).resolve().parents[1]
 DATA_DIR = REPO_ROOT / "data"
 
 ROADS_SHP = DATA_DIR / "gis_osm_roads_free_1.shp"
@@ -37,7 +37,7 @@ REGION_LOOKUP_CSV = DATA_DIR / "roads_region_lookup.csv"
 GHANA_PARQUET_DIR = DATA_DIR / "ghana_parquet"
 
 # Network Inspector output dir resolution. NOT cached at module level: pytest
-# reloads application.web.app to pick up env var changes (tests R2/R3) and a
+# reloads backend.app to pick up env var changes (tests R2/R3) and a
 # stale module-level constant would defeat that. Both call sites
 # (app.OUTPUT_DIR and list_export_files) call this function instead.
 def output_dir() -> Path:

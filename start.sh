@@ -38,7 +38,7 @@ set -m
 # edits to app.py / local_data.py are picked up without a stack restart.
 # Trade-off: Flask prints a "Detected change, reloading" banner per save
 # and is ~50ms slower per request. Worth it during active development.
-NETINSPECT_DEV=1 FLASK_APP=application.web.app flask run --port "$FLASK_PORT" --debug &
+NETINSPECT_DEV=1 FLASK_APP=backend.app flask run --port "$FLASK_PORT" --debug &
 FLASK_PID=$!
 
 # Cleanup trap kills the entire process group (Flask AND Next.js, including npx grandchildren).
@@ -82,7 +82,7 @@ echo ""
 # Start Next.js in background, then poll until either child dies.
 # macOS bash 3.2 doesn't have `wait -n`, so we use a 1-second `kill -0` poll loop.
 # Same semantics: react to either process crashing, not just to Ctrl+C.
-cd application/web/server
+cd frontend
 npx next dev -p "$NEXT_PORT" &
 NEXT_PID=$!
 

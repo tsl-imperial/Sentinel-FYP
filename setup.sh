@@ -63,10 +63,10 @@ pip install --upgrade pip --quiet
 pip install -r requirements.txt
 
 # 2. Node deps for the Next.js app
-echo "→ Installing Node deps in application/web/server"
-cd application/web/server
+echo "→ Installing Node deps in frontend/"
+cd frontend
 npm install
-cd ../../..
+cd ..
 
 # 3. Env file
 if [ ! -f ".env" ]; then

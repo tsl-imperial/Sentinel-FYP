@@ -22,23 +22,23 @@ import pytest
 
 
 def _reload_app(env_overrides):
-    """Re-import application.web.app with the given env, return the module.
+    """Re-import backend.app with the given env, return the module.
 
     Uses importlib.reload to force re-execution of the module body. A naive
-    `del sys.modules[...]` + `from application.web import app` doesn't work
-    because the parent `application.web` package caches `app` as an attribute,
+    `del sys.modules[...]` + `from backend import app` doesn't work
+    because the parent `backend` package caches `app` as an attribute,
     so subsequent imports return the old module without re-running it.
     """
     import importlib
-    import application.web.app
+    import backend.app
 
     for k, v in env_overrides.items():
         if v is None:
             os.environ.pop(k, None)
         else:
             os.environ[k] = v
-    importlib.reload(application.web.app)
-    return application.web.app
+    importlib.reload(backend.app)
+    return backend.app
 
 
 def test_output_dir_default_resolves_to_repo_root(monkeypatch, tmp_path):
@@ -224,7 +224,7 @@ def test_class_palette_does_not_load_shapefile(client):
     loaded" without monkeypatching, but we can assert the call returns immediately
     even on a fresh process by checking the response is well-formed AND the
     `_load_roads` lru_cache hasn't been touched (cache_info().currsize == 0)."""
-    from application.web import local_data
+    from backend import local_data
     # Force-clear the cache so we know we're starting fresh.
     local_data._load_roads.cache_clear()
     res = client.get("/api/class_palette")
@@ -248,7 +248,7 @@ def test_roads_layer_route_deleted(client):
 def test_overview_classes_constant_still_importable():
     """OVERVIEW_CLASSES is still used by region_summaries — deletion of
     overview_layers_for_region must not delete the constant."""
-    from application.web import local_data
+    from backend import local_data
     assert hasattr(local_data, "OVERVIEW_CLASSES")
     assert isinstance(local_data.OVERVIEW_CLASSES, list)
     assert len(local_data.OVERVIEW_CLASSES) > 0
@@ -304,7 +304,7 @@ def test_road_indices_unknown_osm_id_returns_empty_list(client):
 def test_indices_for_osm_id_all_years_returns_list_of_dicts():
     """Direct call sanity: returns the right shape for any known osm_id, or []
     for an unknown one. Doesn't depend on real parquet contents — just shape."""
-    from application.web import local_data
+    from backend import local_data
     rows = local_data.indices_for_osm_id_all_years("999999999999")
     assert rows == []
 
@@ -312,7 +312,7 @@ def test_indices_for_osm_id_all_years_returns_list_of_dicts():
 def test_indices_for_osm_id_all_years_handles_known_id():
     """If the parquet has any data, picking the first osm_id from it should
     return at least one row with year/quarter and the 5 lowercase index keys."""
-    from application.web import local_data
+    from backend import local_data
     df = local_data._load_indices()
     if df.empty:
         pytest.skip("parquet is empty in this checkout")
