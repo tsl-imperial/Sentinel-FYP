@@ -2,7 +2,7 @@
 
 Next.js 16 App Router + TypeScript + Tailwind. Mirrors the metis house style.
 This README is the contractor onboarding doc; for the project-wide picture see
-the [top-level README](../../../README.md).
+the [top-level README](../README.md).
 
 ## Run it
 
@@ -13,7 +13,7 @@ starts Next.js. Don't run `npm run dev` here unless Flask is already running
 elsewhere.
 
 ```bash
-cd ../../..               # back to repo root
+cd ..                     # back to repo root
 ./start.sh                # boots Flask + Next.js together
 ```
 
@@ -72,8 +72,8 @@ when you add a public-facing page.
 This is the most common contractor task. Follow it strictly — the existing
 endpoints all match this shape and review will catch deviations.
 
-1. **Backend** — add the Flask handler in `application/web/app.py`. Read from
-   `application/web/local_data.py` if possible. Return `jsonify({...})` with a
+1. **Backend** — add the Flask handler in `backend/app.py`. Read from
+   `backend/local_data.py` if possible. Return `jsonify({...})` with a
    stable shape. If you call Earth Engine, the `EEException` errorhandler
    already converts failures to `503 + earth_engine_unavailable`.
 

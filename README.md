@@ -43,7 +43,7 @@ The default `.env.example` ships with `NETINSPECT_SKIP_EE_INIT=1`, so a **fresh 
                             ▼
             ┌───────────────────────────────┐
             │  Next.js 16 (Node, port 3666) │
-            │  application/web/server/      │
+            │  frontend/                    │
             │  - App Router pages           │
             │  - Tailwind, no UI library    │
             │  - TanStack Query             │
@@ -57,7 +57,7 @@ The default `.env.example` ships with `NETINSPECT_SKIP_EE_INIT=1`, so a **fresh 
                             ▼
             ┌───────────────────────────────┐
             │  Flask (Python, port 5050)    │
-            │  application/web/app.py       │
+            │  backend/app.py               │
             │  - /api/* routes              │
             │  - reads .env via dotenv      │
             │  - graceful 503 on GEE fail   │
@@ -73,7 +73,7 @@ The frontend and backend are **two processes** orchestrated by a single `./start
 
 The backend stays Python because `geopandas`, `osmnx`, `igraph`, and `earthengine-api` have no Node equivalents.
 
-`application/web/local_data.py` is the load-bearing module for the local-first data path. It reads the Geofabrik OSM shapefile, the per-road Sentinel-2 parquet, and the region lookup CSV, then serves them via cached helpers. Each region's overview/details/boundary calls hit a warm `@lru_cache` after the first request.
+`backend/local_data.py` is the load-bearing module for the local-first data path. It reads the Geofabrik OSM shapefile, the per-road Sentinel-2 parquet, and the region lookup CSV, then serves them via cached helpers. Each region's overview/details/boundary calls hit a warm `@lru_cache` after the first request.
 
 ## Repo layout
 
@@ -83,25 +83,30 @@ The backend stays Python because `geopandas`, `osmnx`, `igraph`, and `earthengin
 ├── setup.sh                  ← one-time bootstrap (venv + npm install + tool checks)
 ├── start.sh                  ← dev orchestrator (Flask + Next.js + health gating)
 ├── requirements.txt          ← Python deps
-├── application/
+├── backend/                  ← Python (Flask + data layer + GEE)
+│   ├── app.py                ← Flask backend (/api/* routes)
+│   ├── local_data.py         ← parquet + shapefile reader, served by /api/* read paths
 │   ├── config.py             ← env-driven constants (asset IDs, road classes, colors)
-│   ├── logic/                ← legacy GEE + geospatial logic (still used by export endpoint)
-│   └── web/
-│       ├── app.py            ← Flask backend (/api/* routes)
-│       ├── local_data.py     ← parquet + shapefile reader, served by /api/* read paths
-│       └── server/           ← Next.js frontend
-│           ├── package.json
-│           ├── next.config.js
-│           ├── app/
-│           │   ├── layout.tsx, page.tsx, providers.tsx
-│           │   ├── workbench/    ← main map UI
-│           │   ├── regions/      ← region browser
-│           │   ├── exports/      ← export history
-│           │   ├── about/        ← methodology
-│           │   ├── components/   ← Nav, MapView, ResultsPanel, ...
-│           │   ├── hooks/        ← TanStack Query wrappers + usePolygonDraw
-│           │   └── lib/          ← api client, schemas, format helpers
-│           └── tests/            ← vitest + playwright
+│   ├── gee.py                ← Earth Engine helpers (init, region geom, S2 composites)
+│   └── features.py           ← nearest-road + per-road S2 stats (export endpoint only)
+├── frontend/                 ← Next.js 16 App Router
+│   ├── package.json
+│   ├── next.config.js
+│   ├── app/
+│   │   ├── layout.tsx, page.tsx, providers.tsx
+│   │   ├── workbench/        ← main map UI
+│   │   ├── regions/          ← region browser
+│   │   ├── exports/          ← export history
+│   │   ├── about/            ← methodology
+│   │   ├── components/       ← Nav, MapView, ResultsPanel, ...
+│   │   ├── hooks/            ← TanStack Query wrappers + usePolygonDraw
+│   │   └── lib/              ← api client, schemas, format helpers
+│   ├── public/
+│   │   └── tiles/
+│   │       └── ghana_roads.pmtiles  ← ~24 MB committed binary
+│   └── tests/                ← vitest + playwright
+├── scripts/
+│   └── build_tiles.py        ← shapefile → tippecanoe → ghana_roads.pmtiles
 ├── tests/                    ← pytest suite (backend hygiene + R1-R4 regressions)
 ├── notebooks/                ← analysis Jupyter notebooks (not part of the web app)
 ├── data/                     ← OSM shapefile, parquet exports, region lookup
@@ -110,7 +115,7 @@ The backend stays Python because `geopandas`, `osmnx`, `igraph`, and `earthengin
 
 ## Data sources
 
-Everything below is read by `application/web/local_data.py` and served by the read endpoints. None require network or Earth Engine.
+Everything below is read by `backend/local_data.py` and served by the read endpoints. None require network or Earth Engine.
 
 | File | Size | Source | Purpose |
 |---|---|---|---|
@@ -150,7 +155,7 @@ Tests use `mocked_ee` fixtures so they don't need real GEE credentials. The 4 ba
 
 **Frontend (Vitest + Playwright):**
 ```bash
-cd application/web/server
+cd frontend
 npm run test          # vitest unit tests, includes R5/R6/R7 React 19 strict-mode regressions
 npm run typecheck     # tsc strict
 npm run lint          # eslint flat config
@@ -190,7 +195,7 @@ Read endpoints (no GEE required, served from `local_data.py`):
 | `GET /api/exports` | List of past extractions in `NETINSPECT_OUTPUT_DIR`, grouped by prefix |
 | `GET /api/exports/file/<name>` | Download a single export file (path-safe via `secure_filename`) |
 
-The road geometries themselves are NOT served from a JSON endpoint. They live in a single ~24 MB `application/web/server/public/tiles/ghana_roads.pmtiles` file built once via `python scripts/build_tiles.py`, served as a static file with HTTP byte-range support, and rendered by MapLibre GL JS via the `pmtiles://` protocol. See the "Rebuilding tiles" section below.
+The road geometries themselves are NOT served from a JSON endpoint. They live in a single ~24 MB `frontend/public/tiles/ghana_roads.pmtiles` file built once via `python scripts/build_tiles.py`, served as a static file with HTTP byte-range support, and rendered by MapLibre GL JS via the `pmtiles://` protocol. See the "Rebuilding tiles" section below.
 
 Write endpoints (still GEE-bound for the Sentinel-2 part):
 
@@ -207,7 +212,7 @@ The `ghana_roads.pmtiles` file is committed to git. Rebuild it manually after th
 ```bash
 brew install tippecanoe        # one-time, macOS (or apt install tippecanoe on Ubuntu 24.04+)
 python scripts/build_tiles.py  # ~30 seconds, idempotent (skips if output is newer than input)
-git add application/web/server/public/tiles/ghana_roads.pmtiles
+git add frontend/public/tiles/ghana_roads.pmtiles
 git commit -m "data: rebuild ghana_roads.pmtiles"
 ```
 

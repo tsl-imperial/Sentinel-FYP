@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 // GET /api/road_indices?osm_id=N → { osm_id, indices: [...] }
 //
-// Backend source: application/web/local_data.py:indices_for_osm_id_all_years()
+// Backend source: backend/local_data.py:indices_for_osm_id_all_years()
 // which slices the (osm_id, year, quarter) MultiIndex on the per-road parquet.
 // Returns ALL years/quarters for the requested road, sorted most-recent first.
 //

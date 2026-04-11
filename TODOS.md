@@ -11,11 +11,11 @@ original modernization plan with full reasoning lives at
 
 - Frontend ported from vanilla JS + Flask templates → Next.js 16 App Router + TypeScript + Tailwind, mirroring the metis house style
 - Backend hygiene: hardcoded `/Users/miranda/...` path replaced with repo-root-anchored `OUTPUT_DIR`, `init_ee()` guarded for tests/CI, dev CORS, `/api/healthz` + `/api/healthz/ready`
-- Streamlit prototype (`application/prototype.py`) deleted
+- Streamlit prototype (the old `application/prototype.py`) deleted
 - Bootstrap scripts: `setup.sh` (venv + npm install + tool checks) and `start.sh` (orchestrates Flask + Next.js with health gating, bash 3.2 compatible)
 - Test scaffolding: pytest with R1-R4 regression tests, vitest with R5-R7 React 19 strict-mode regressions, Playwright E2E smoke
 - GitHub Actions CI workflow
-- **Local-data path** (originally a deferred option, now the default): `application/web/local_data.py` reads the Geofabrik Ghana shapefile + per-road Sentinel-2 parquet + region lookup CSV. The five read endpoints (`/api/regions`, `/api/region_info`, `/api/overview_layers`, `/api/boundary_layer`, `/api/regions/details`) serve from local files with **zero Earth Engine dependency**. Fresh checkouts boot without GEE auth.
+- **Local-data path** (originally a deferred option, now the default): `backend/local_data.py` reads the Geofabrik Ghana shapefile + per-road Sentinel-2 parquet + region lookup CSV. The five read endpoints (`/api/regions`, `/api/region_info`, `/api/overview_layers`, `/api/boundary_layer`, `/api/regions/details`) serve from local files with **zero Earth Engine dependency**. Fresh checkouts boot without GEE auth.
 - `/regions` page: real per-region cards with road km, edge count, class composition bar — fed by `/api/regions/details`
 - `/exports` page: lists past extraction runs in `NETINSPECT_OUTPUT_DIR`, grouped by prefix, with download links
 
@@ -29,7 +29,7 @@ original modernization plan with full reasoning lives at
 
 **Why deferred:** The local parquet only covers the road segments that were pre-computed. A fresh polygon outside the existing osm_id set has nothing to look up. We'd need either (a) an "if all polygon roads are in the parquet, use it; else fall back to GEE" branch, or (b) accept that fresh polygons need GEE auth.
 
-**Where it slots in:** `application/web/app.py:export_polygon_network_s2`. `local_data.indices_for_polygon()` already exists and is wired — it just isn't called from the export route yet.
+**Where it slots in:** `backend/app.py:export_polygon_network_s2`. `local_data.indices_for_polygon()` already exists and is wired — it just isn't called from the export route yet.
 
 **Trigger to start:** When you actually need a fully GEE-free demo for the World Bank handoff. ~30 minutes of work.
 
@@ -39,7 +39,7 @@ original modernization plan with full reasoning lives at
 
 **What:** `/api/boundary_layer` currently returns the convex hull of the region's road geometries. It's a visual indicator, not a real admin polygon. Same for `area_km2` in `/api/regions/details` — currently uses the bounding box rectangle area, which over-estimates by 2-3x for compact regions like Greater Accra.
 
-**Where it slots in:** Drop a Ghana ADM1 GeoPackage (e.g., from `humdata.org` or the World Bank's WBGAD dataset already referenced in `application/config.py:REGIONS_FC_ID`) into `data/`, add a loader to `local_data.py`, replace `boundary_geojson_for_region` and the `area_km2` computation.
+**Where it slots in:** Drop a Ghana ADM1 GeoPackage (e.g., from `humdata.org` or the World Bank's WBGAD dataset already referenced in `backend/config.py:REGIONS_FC_ID`) into `data/`, add a loader to `local_data.py`, replace `boundary_geojson_for_region` and the `area_km2` computation.
 
 **Trigger to start:** When a stakeholder notices that "Greater Accra: 9,126 km²" is wrong (the real number is ~3,245 km²), or when the boundary outline needs to look like Ghana's actual administrative borders rather than a convex hull.
 
@@ -93,9 +93,9 @@ original modernization plan with full reasoning lives at
 
 ---
 
-### 7. Backend refactor of `application/logic/`
+### 7. Backend refactor of `backend/gee.py` + `backend/features.py`
 
-**What:** The GEE / osmnx / geopandas modules in `application/logic/` were not touched in the modernization. They work but could use type hints, structured logging, and tests.
+**What:** The GEE / osmnx / geopandas modules (`backend/gee.py`, `backend/features.py` — these were `application/logic/{gee,features}.py` before the v2.6 layout flatten) were not touched in the modernization. They work but could use type hints, structured logging, and tests.
 
 **Why deferred:** Out of scope for "modernize the frontend." Low-priority compared to anything that changes user-facing behavior.
 
@@ -139,7 +139,7 @@ original modernization plan with full reasoning lives at
 
 **Why deferred:** Fine for a single-analyst tool today. Becomes a real gap as soon as the World Bank pilot has multiple users you can't directly DM. The cost of investigating "user X says it's broken" without metrics is hours; with metrics it's minutes.
 
-**Where it slots in:** Sentry SDK in `application/web/server/app/layout.tsx` (frontend) and `application/web/app.py` (backend). `prometheus_client` for the Flask metrics endpoint. Grafana docker compose for local dev. `start.sh` does NOT need to change. CI does NOT need to change.
+**Where it slots in:** Sentry SDK in `frontend/app/layout.tsx` (frontend) and `backend/app.py` (backend). `prometheus_client` for the Flask metrics endpoint. Grafana docker compose for local dev. `start.sh` does NOT need to change. CI does NOT need to change.
 
 **Trigger to start:** Production deploy is being scoped (intersects with TODOS items 4 and 5), OR a real user reports a bug you can't reproduce.
 
@@ -149,7 +149,7 @@ original modernization plan with full reasoning lives at
 
 **What:** Sentinel-FYP currently has no `DESIGN.md`. The implicit design system is "match metis with literal slate values." This works while the surface is small but breaks down as more contributors touch the codebase. The workbench rebuild introduces 5 new primitives (`AppSidebar`, `SidebarSection`, `SidebarEntry`, `DockedPanel`, `MapControls`) and a 16-row token mapping table — that's the seed of a real design system that should be locked in writing.
 
-**Why deferred:** Surfaced in Pass 5 of the workbench `/plan-design-review`. The token mapping baked into the workbench plan is enough for the implementer of THIS rebuild. The next contributor will need a `DESIGN.md` to know the slate token vocabulary, the road class palette source (`application/config.py:CLASS_COLORS`), the focus ring convention, the "no decorative cards" rule, the icon library (lucide-react), and the typography (Inter via the metis convention).
+**Why deferred:** Surfaced in Pass 5 of the workbench `/plan-design-review`. The token mapping baked into the workbench plan is enough for the implementer of THIS rebuild. The next contributor will need a `DESIGN.md` to know the slate token vocabulary, the road class palette source (`backend/config.py:CLASS_COLORS`), the focus ring convention, the "no decorative cards" rule, the icon library (lucide-react), and the typography (Inter via the metis convention).
 
 **Where it slots in:** New `DESIGN.md` at the repo root. Run `/design-consultation` to scaffold it. Document: (a) the slate token mapping, (b) the road class palette source of truth, (c) the 5 ported primitives with usage examples, (d) the focus ring convention, (e) the AI-slop guardrails (no decorative cards, no emoji, utility copy, left-aligned).
 
@@ -172,7 +172,7 @@ original modernization plan with full reasoning lives at
 ### 14. Don't reintroduce things that were deleted
 
 - `application/prototype.py` — Streamlit prototype, removed in v2. Any analyst workflows that lived there should be ported into the Next.js workbench, NOT resurrected.
-- `application/web/static/` and `application/web/templates/` — legacy vanilla JS frontend. Deleted at the end of Phase 2. The new frontend lives entirely in `application/web/server/`.
+- `application/web/static/` and `application/web/templates/` — legacy vanilla JS frontend. Deleted at the end of Phase 2. The new frontend lives entirely in `frontend/` (was `application/web/server/` until the v2.6 layout flatten).
 - The hand-rolled `_simplify_geom` wrapper, `forceRender` hook hack, hardcoded `/Users/miranda/...` path, `wait -n` in `start.sh`, top-level Leaflet import in modules used by SSR — all caught by review and removed. Don't bring them back.
 
 ---
