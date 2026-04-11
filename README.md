@@ -10,10 +10,27 @@ Drivable road network analytics for West African corridors. Combines OpenStreetM
 git clone <repo>
 cd Sentinel-FYP
 ./setup.sh        # creates .venv, installs Python + Node deps, copies .env
-./start.sh        # boots Flask backend + Next.js frontend in parallel
+./start.sh        # boots Flask + Next.js in the background, exits in ~15s
 ```
 
-Open <http://127.0.0.1:3666> in your browser. Ctrl+C in the terminal stops both processes cleanly.
+Open <http://127.0.0.1:3666> in your browser. The workbench loads.
+
+`./start.sh` runs both services in the **background** and exits — they keep running after you close the terminal. Code edits are picked up automatically (Flask `--debug` + Next.js dev hot reload). When you're done, run `./start.sh stop`.
+
+```bash
+./start.sh                    # start both (also restarts if already running)
+./start.sh status             # is it running? are the services healthy?
+./start.sh logs               # tail both logs interleaved
+./start.sh logs flask         # tail only the backend log (great for Python debugging)
+./start.sh logs next          # tail only the frontend log
+./start.sh backend            # restart only Flask after a Python change you don't trust
+./start.sh frontend           # restart only Next.js
+./start.sh restart            # restart everything
+./start.sh stop               # done for the day
+./start.sh --help             # full reference
+```
+
+Logs live at `_log/syslog-flask.log` and `_log/syslog-next.log` (gitignored).
 
 The default `.env.example` ships with `NETINSPECT_SKIP_EE_INIT=1`, so a **fresh checkout boots without Earth Engine credentials**. Every read endpoint serves from local files (the Geofabrik OSM extract + the per-road Sentinel-2 parquet) and you can poke at the workbench, regions, and exports pages immediately. Comment out the skip flag in `.env` once you've run `earthengine authenticate` to enable the live export pipeline.
 

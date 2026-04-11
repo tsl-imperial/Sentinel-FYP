@@ -123,7 +123,19 @@ Intentional. macOS resolves `localhost` to both `::1` and `127.0.0.1`, and Node'
 Flask defaults to **5050** because macOS Control Center / AirPlay Receiver permanently binds port 5000 — using 5000 produces a confusing "Address already in use" that the user often can't fix without disabling system features. Next.js defaults to **3666** to mirror the metis house style and to avoid the common 3000 conflict with other Node dev servers. Both are overridable via `.env` (`FLASK_RUN_PORT`, `NEXT_PORT`).
 
 ### `start.sh` is bash 3.2 compatible
-macOS ships bash 3.2 by default. Do not use `wait -n`, mapfile, associative arrays, or `${var^^}` style transformations in `start.sh` or `setup.sh`. The current `start.sh` uses a `while kill -0` polling loop instead of `wait -n` to detect child process death. If you need bash 4+ features, either use `zsh` (which is the macOS default shell) or pin to `#!/usr/bin/env bash` and document the requirement.
+macOS ships bash 3.2 by default. Do not use `wait -n`, mapfile, associative arrays, or `${var^^}` style transformations in `start.sh` or `setup.sh`. If you need bash 4+ features, either use `zsh` (which is the macOS default shell) or pin to `#!/usr/bin/env bash` and document the requirement.
+
+### `start.sh` runs services in the background (NOT foreground)
+The dev orchestrator (rewritten v2.6) backgrounds Flask + Next.js, pipes their output to `_log/syslog-{flask,next}.log` with line-level timestamps, then **exits**. Services keep running after the terminal closes. This is the nefos `run-services.sh` pattern.
+
+Implications:
+- **Closing the terminal does NOT stop the services.** Use `./start.sh stop`. Anyone with muscle memory for "Ctrl+C in start.sh kills everything" will be confused — there is nothing to Ctrl+C, the script has exited.
+- **Re-running `./start.sh` is the restart path.** It detects existing pids on the configured ports and `kill -9`s them (including the Werkzeug reloader child — see next gotcha) before spawning fresh ones.
+- **Hot reload works without re-running.** Flask `--debug` + Next.js dev pick up code changes automatically. The backgrounded process is what's reloading. To see reload output: `./start.sh logs flask` or `./start.sh logs next`.
+- **`./start.sh status` health-checks.** Port-binding is necessary but not sufficient (we hit zombie reloader children that bound but couldn't import their own module). The status command also calls `/api/healthz` and reports `[healthy]` / `[unresponsive]`.
+
+### `flask --debug` reloader + port kill ordering
+`flask run --debug` enables Werkzeug's reloader, which spawns a CHILD process that inherits the listening socket. Killing only the parent (the obvious lsof match) leaves the orphaned child squatting on the port and the next `bind()` fails with `EADDRINUSE`. `start.sh:_port_pids()` returns ALL pids on the port and `kill -9 $_PORT_PIDS` (unquoted) takes them out together. The post-kill `sleep 2` is also load-bearing — the kernel needs a beat to release the listening socket before the next bind. Don't shorten it.
 
 ## Repo layout
 

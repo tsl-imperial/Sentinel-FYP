@@ -8,13 +8,16 @@ the [top-level README](../README.md).
 
 The frontend assumes the Flask backend is reachable at `FLASK_BACKEND_URL`
 (default `http://127.0.0.1:5050`). For the full stack, use the **top-level**
-`./start.sh` — it boots Flask, polls `/api/healthz` until Flask is ready, then
-starts Next.js. Don't run `npm run dev` here unless Flask is already running
-elsewhere.
+`./start.sh` — it boots Flask in the background, polls `/api/healthz` until
+Flask responds, starts Next.js in the background, and exits. Both services
+keep running after the script returns. Don't run `npm run dev` here unless
+Flask is already running elsewhere.
 
 ```bash
 cd ..                     # back to repo root
-./start.sh                # boots Flask + Next.js together
+./start.sh                # backgrounds Flask + Next.js, exits in ~15s
+./start.sh logs next      # tail just the Next.js log (great for hot-reload watching)
+./start.sh stop           # done
 ```
 
 Frontend-only commands (run from this directory):
@@ -184,8 +187,10 @@ Both overridable via `.env` (`FLASK_RUN_PORT`, `NEXT_PORT`).
 
 `setup.sh` and the top-level `start.sh` are bash 3.2 compatible because that
 ships with macOS. Don't use `wait -n`, mapfile, associative arrays, or
-`${var^^}` style transformations in those scripts. The `start.sh` uses a
-`while kill -0` polling loop instead of `wait -n` for exactly this reason.
+`${var^^}` style transformations in those scripts. `start.sh` runs services
+in the background and tracks them via `lsof` on the configured ports — there
+is no parent process waiting for child exits, so `wait -n` would not have
+helped anyway.
 
 ### CSS
 
