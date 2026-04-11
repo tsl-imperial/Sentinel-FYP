@@ -34,8 +34,11 @@ echo ""
 # Run both processes in their own process group so trap-kill -$$ takes them all out.
 set -m
 
-# Start Flask in background
-NETINSPECT_DEV=1 FLASK_APP=application.web.app flask run --port "$FLASK_PORT" &
+# Start Flask in background. --debug enables the auto-reloader so backend
+# edits to app.py / local_data.py are picked up without a stack restart.
+# Trade-off: Flask prints a "Detected change, reloading" banner per save
+# and is ~50ms slower per request. Worth it during active development.
+NETINSPECT_DEV=1 FLASK_APP=application.web.app flask run --port "$FLASK_PORT" --debug &
 FLASK_PID=$!
 
 # Cleanup trap kills the entire process group (Flask AND Next.js, including npx grandchildren).

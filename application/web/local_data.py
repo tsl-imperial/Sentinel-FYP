@@ -180,6 +180,21 @@ def boundary_geojson_for_region(region: str) -> dict[str, Any] | None:
     }
 
 
+def _row_to_index_dict(row: pd.Series, lowercase: bool = False) -> dict[str, float | None]:
+    """Extract the 5 Sentinel-2 indices from a single parquet row, coercing
+    pandas NaN → None so the result is JSON-serialisable. `lowercase=True`
+    matches the frontend zod schema in `roadIndices.ts` (used by the
+    `/api/road_indices` route); the default keeps the uppercase keys used
+    by the legacy notebook helpers.
+    """
+    out: dict[str, float | None] = {}
+    for col in INDEX_COLS:
+        key = col.lower() if lowercase else col
+        val = row[col] if col in row.index else None
+        out[key] = float(val) if val is not None and pd.notna(val) else None
+    return out
+
+
 def indices_for_road(osm_id: str, year: int, quarter: str) -> dict[str, float | None] | None:
     """Look up Sentinel-2 mean indices for a single road segment, year, quarter."""
     df = _load_indices()
@@ -189,7 +204,44 @@ def indices_for_road(osm_id: str, year: int, quarter: str) -> dict[str, float | 
         return None
     if isinstance(row, pd.DataFrame):
         row = row.iloc[0]
-    return {col: (float(row[col]) if pd.notna(row[col]) else None) for col in INDEX_COLS}
+    return _row_to_index_dict(row)
+
+
+def indices_for_osm_id_all_years(osm_id: str) -> list[dict[str, Any]]:
+    """All Sentinel-2 mean indices for a single road across every year/quarter
+    in the parquet. Used by the workbench hover popup and click-to-dock road
+    inspector — both endpoints share `/api/road_indices?osm_id=` and the
+    frontend filters client-side per the design review (Pass 2).
+
+    Returns a list of `{year, quarter, ndvi, ndmi, ndbi, ndwi, bsi}` dicts
+    sorted most-recent first. Returns `[]` if the osm_id is not in the
+    parquet (the road exists in OSM but Sentinel indices were never computed
+    for it). The endpoint translates `[]` to `200 {indices: []}`, NOT 404 —
+    the road still exists, the indices just aren't there. The popup falls
+    back to `(no indices)` per the design-review failure spec.
+
+    O(log n) lookup via the existing `(osm_id, year, quarter)` MultiIndex on
+    `_load_indices()`. No new caching layer.
+    """
+    df = _load_indices()
+    try:
+        sub = df.xs(str(osm_id), level="osm_id")
+    except KeyError:
+        return []
+    rows: list[dict[str, Any]] = []
+    for idx, row in sub.iterrows():
+        # After xs() drops the osm_id level, the remaining MultiIndex is
+        # (year, quarter). Pandas iterrows yields the index tuple as `idx`.
+        if isinstance(idx, tuple):
+            year, quarter = idx
+        else:
+            year, quarter = idx, ""
+        entry: dict[str, Any] = {"year": int(year), "quarter": str(quarter)}
+        entry.update(_row_to_index_dict(row, lowercase=True))
+        rows.append(entry)
+    # Most recent first: (year desc, quarter desc lexical — Q4 > Q3 > Q2 > Q1).
+    rows.sort(key=lambda r: (r["year"], r["quarter"]), reverse=True)
+    return rows
 
 
 def indices_for_polygon(

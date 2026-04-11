@@ -11,6 +11,12 @@ import { apiFetch } from '@/lib/api';
  * schema, key by query name + arg. Without this factory we'd have one
  * hand-rolled hook per endpoint and they'd silently drift on staleTime / retry
  * configuration (review caught a real drift between useRegions and the others).
+ *
+ * Forwards TanStack Query's AbortSignal into apiFetch → fetch so that when
+ * the query is unmounted or its key changes, the in-flight request is
+ * actually cancelled instead of completing wastefully. Without this forward,
+ * a fast cursor sweep across many roads would queue dozens of requests that
+ * keep running after the user has moved on.
  */
 export function useApiQuery<T, TArg = void>(
   name: string,
@@ -21,7 +27,7 @@ export function useApiQuery<T, TArg = void>(
 ) {
   return useQuery<T, Error>({
     queryKey: [name, arg],
-    queryFn: () => apiFetch(buildPath(arg), schema),
+    queryFn: ({ signal }) => apiFetch(buildPath(arg), schema, { signal }),
     ...options,
   });
 }

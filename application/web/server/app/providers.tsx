@@ -2,6 +2,7 @@
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useState, type ReactNode } from 'react';
+import { Toaster } from 'sonner';
 
 export function Providers({ children }: { children: ReactNode }) {
   const [client] = useState(
@@ -17,5 +18,14 @@ export function Providers({ children }: { children: ReactNode }) {
         },
       }),
   );
-  return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
+  return (
+    <QueryClientProvider client={client}>
+      {children}
+      {/* Global toaster for transient notifications. Bottom-right placement
+          keeps it out of the way of the map's polygon-draw area and the
+          breadcrumb header. richColors gives error toasts a red surface
+          that's visible against the slate map. */}
+      <Toaster position="bottom-right" richColors closeButton />
+    </QueryClientProvider>
+  );
 }

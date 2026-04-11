@@ -46,11 +46,6 @@ export function Nav() {
             );
           })}
         </nav>
-
-        <div className="flex items-center gap-2 text-xs text-slate-500">
-          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-          <span>Connected</span>
-        </div>
       </div>
     </header>
   );

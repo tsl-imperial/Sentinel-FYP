@@ -12,9 +12,12 @@ const STATUS_PILL: Record<ResultStatus['kind'], { text: string; cls: string }> =
   region_changed: { text: 'Region changed', cls: 'text-slate-500' },
 };
 
+const PARTIAL_PILL = { text: 'Partial', cls: 'text-amber-700' };
+
 export function ResultsPanel({ status, elapsedSeconds }: { status: ResultStatus; elapsedSeconds?: number }) {
   const headline = summarizeResult(status);
-  const pill = STATUS_PILL[status.kind];
+  const isDegraded = status.kind === 'ok' && status.result.degraded === true;
+  const pill = isDegraded ? PARTIAL_PILL : STATUS_PILL[status.kind];
 
   const result = status.kind === 'ok' ? status.result : null;
   const summary = result?.summary;
@@ -44,7 +47,14 @@ export function ResultsPanel({ status, elapsedSeconds }: { status: ResultStatus;
         {status.kind === 'ok' && (
           <>
             <div className="label mb-2">Sentinel-2 mean indices</div>
-            <IndicesChart stats={sentinelMean} />
+            {isDegraded ? (
+              <div className="border border-amber-200 bg-amber-50 text-amber-800 text-xs px-3 py-2 rounded">
+                Sentinel-2 indices unavailable for this run.{' '}
+                {result?.degraded_reason ?? 'Earth Engine unavailable.'}
+              </div>
+            ) : (
+              <IndicesChart stats={sentinelMean} />
+            )}
 
             {result?.links && (result.links.mapillary || result.links.google_street_view) && (
               <div className="border-t border-slate-200 pt-3 mt-4 text-xs space-y-1.5">

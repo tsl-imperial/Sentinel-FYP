@@ -7,7 +7,6 @@ import './globals.css';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { Providers } from './providers';
 import { Nav } from './components/Nav';
-import { Footer } from './components/Footer';
 
 export const metadata: Metadata = {
   title: 'Network Inspector',
@@ -27,7 +26,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <Providers>
           <Nav />
           <main className="flex-1 flex flex-col">{children}</main>
-          <Footer />
         </Providers>
       </body>
     </html>

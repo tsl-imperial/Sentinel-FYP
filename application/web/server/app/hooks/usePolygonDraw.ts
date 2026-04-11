@@ -16,6 +16,13 @@ import type { Map as MaplibreMap } from 'maplibre-gl';
  * API SHAPE: `{isClosed, pointCount, getLngLatPolygon, clear}` — verbatim
  * match for the old Leaflet hook so workbench/page.tsx (`polygon.pointCount`
  * gates "Run extraction") works unchanged.
+ *
+ * MODE GATING (workbench v2.6): the hook accepts an `enabled` flag. When
+ * false, terra-draw is never started — the map's click events fall through
+ * to the MapView's road click handler so the user can inspect roads without
+ * dropping vertices. When `enabled` flips from true to false (the user
+ * switched to select mode), the cleanup tears down terra-draw and the
+ * polygon clears. The user re-enters polygon mode to start a fresh draw.
  */
 
 export interface PolygonDrawAPI {
@@ -52,12 +59,6 @@ const POLYGON_STYLES = {
 } as const;
 
 /**
- * Read the current in-progress polygon's coordinate ring from the terra-draw
- * snapshot. terra-draw stores polygons as GeoJSON Polygon features (one outer
- * ring); we strip the closing duplicate vertex so consumers see only unique
- * points (matching the old Leaflet behavior, which used L.LatLng[] directly).
- */
-/**
  * Read the in-progress polygon's coordinate ring from terra-draw. The snapshot
  * may also contain closing-point markers; we only want the Polygon geometry,
  * with the GeoJSON-mandatory closing-vertex duplicate stripped so pointCount
@@ -93,7 +94,10 @@ function pointsEqual(a: Array<[number, number]>, b: Array<[number, number]>): bo
   return true;
 }
 
-export function usePolygonDraw(map: MaplibreMap | null): PolygonDrawAPI {
+export function usePolygonDraw(
+  map: MaplibreMap | null,
+  enabled: boolean = true,
+): PolygonDrawAPI {
   const [state, setState] = useState<DrawState>(INITIAL_STATE);
   // useRef (not useState) for the TerraDraw instance: clear() reads it but no
   // child needs to re-render when it appears. Using state would fire two extra
@@ -102,6 +106,13 @@ export function usePolygonDraw(map: MaplibreMap | null): PolygonDrawAPI {
 
   useEffect(() => {
     if (!map) return;
+    if (!enabled) {
+      // Mode flipped to select. Reset the React state so the docked panel
+      // and Run button see an empty polygon. Cleanup of any prior terra-draw
+      // instance is handled by the previous effect run's return below.
+      setState(INITIAL_STATE);
+      return;
+    }
 
     // terra-draw's start() requires the MapLibre style to be fully loaded
     // (basemap raster + pmtiles source must be streamed in), otherwise it
@@ -154,7 +165,7 @@ export function usePolygonDraw(map: MaplibreMap | null): PolygonDrawAPI {
       }
       drawRef.current = null;
     };
-  }, [map]);
+  }, [map, enabled]);
 
   const clear = useCallback(() => {
     drawRef.current?.clear();

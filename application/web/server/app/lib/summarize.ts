@@ -33,7 +33,11 @@ export function summarizeResult(status: ResultStatus): string {
       const km = Number.isFinite(s.total_road_km) ? s.total_road_km.toFixed(2) : '-';
       const year = s.year ?? '-';
       const quarter = s.quarter ?? '-';
-      return `Completed for ${status.region} (${year} ${quarter}). Extracted ${km} km across ${s.edge_count} edges / ${s.node_count} nodes.`;
+      const headline = `Completed for ${status.region} (${year} ${quarter}). Extracted ${km} km across ${s.edge_count} edges / ${s.node_count} nodes.`;
+      if (status.result.degraded) {
+        return `${headline} Sentinel indices unavailable: ${status.result.degraded_reason ?? 'Earth Engine unavailable'}.`;
+      }
+      return headline;
     }
   }
 }

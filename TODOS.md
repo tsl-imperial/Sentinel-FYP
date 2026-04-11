@@ -121,7 +121,55 @@ original modernization plan with full reasoning lives at
 
 ---
 
-### 10. Don't reintroduce things that were deleted
+### 10. Workbench keyboard shortcuts
+
+**What:** Add keyboard shortcuts to the workbench: `R` = run extraction, `C` = clear polygon, `ESC` = deselect / close docked panel, `?` = toggle a shortcut overlay. Skip when focus is in an input field.
+
+**Why deferred:** Right idea, wrong moment. Surfaced and deferred during the `/plan-ceo-review` of the workbench layout rebuild (CEO plan: `~/.gstack/projects/tsl-imperial-Sentinel-FYP/ceo-plans/2026-04-11-workbench-nefos-primitives.md`). Bundling shortcuts into a structural rewrite inflates risk for marginal gain. Land the layout, validate the UX, then layer shortcuts on top in a focused follow-up.
+
+**Where it slots in:** New `app/hooks/useKeyboardShortcuts.ts` hook (subscribes to `window` keydown, checks `document.activeElement` to skip when in `<input>`/`<textarea>`/`[contenteditable]`). New `app/components/ShortcutsOverlay.tsx` triggered by `?`. Wired in `workbench/page.tsx` next to the existing `handleRun`/`handleClear`/`handleCancel` callbacks.
+
+**Trigger to start:** After the layout rebuild lands, when you've used the workbench for ~a week and notice yourself wanting them. Or when an analyst with GIS muscle memory complains.
+
+---
+
+### 11. Observability baseline (metrics + traces + alerting)
+
+**What:** The app currently has zero metrics, zero traces, and zero alerting beyond `/api/healthz` + `/api/healthz/ready`. Surfaced during Section 8 of the workbench layout CEO review. Realistic baseline: Sentry on the frontend (free tier handles low volume), `structlog` + a small `/metrics` Prometheus endpoint on Flask, plus a basic Grafana dashboard panel for request rate, p99 latency, error rate.
+
+**Why deferred:** Fine for a single-analyst tool today. Becomes a real gap as soon as the World Bank pilot has multiple users you can't directly DM. The cost of investigating "user X says it's broken" without metrics is hours; with metrics it's minutes.
+
+**Where it slots in:** Sentry SDK in `application/web/server/app/layout.tsx` (frontend) and `application/web/app.py` (backend). `prometheus_client` for the Flask metrics endpoint. Grafana docker compose for local dev. `start.sh` does NOT need to change. CI does NOT need to change.
+
+**Trigger to start:** Production deploy is being scoped (intersects with TODOS items 4 and 5), OR a real user reports a bug you can't reproduce.
+
+---
+
+### 12. DESIGN.md and design system documentation
+
+**What:** Sentinel-FYP currently has no `DESIGN.md`. The implicit design system is "match metis with literal slate values." This works while the surface is small but breaks down as more contributors touch the codebase. The workbench rebuild introduces 5 new primitives (`AppSidebar`, `SidebarSection`, `SidebarEntry`, `DockedPanel`, `MapControls`) and a 16-row token mapping table — that's the seed of a real design system that should be locked in writing.
+
+**Why deferred:** Surfaced in Pass 5 of the workbench `/plan-design-review`. The token mapping baked into the workbench plan is enough for the implementer of THIS rebuild. The next contributor will need a `DESIGN.md` to know the slate token vocabulary, the road class palette source (`application/config.py:CLASS_COLORS`), the focus ring convention, the "no decorative cards" rule, the icon library (lucide-react), and the typography (Inter via the metis convention).
+
+**Where it slots in:** New `DESIGN.md` at the repo root. Run `/design-consultation` to scaffold it. Document: (a) the slate token mapping, (b) the road class palette source of truth, (c) the 5 ported primitives with usage examples, (d) the focus ring convention, (e) the AI-slop guardrails (no decorative cards, no emoji, utility copy, left-aligned).
+
+**Trigger to start:** Immediately after the workbench rebuild lands, while the design decisions are still fresh in the implementer's head. ~30 minutes of CC time.
+
+---
+
+### 13. Session persistence / saved views
+
+**What:** The workbench is fully ephemeral. Close the browser, your in-progress polygon is gone, your clicked road inspector selection is gone, your last extraction's results panel is gone. URL state preserves the map view (region, center, zoom, time, cloud) but not the work.
+
+**Why deferred:** Surfaced during the `/plan-design-review` of the workbench layout rebuild (Pass 3, user-journey arc step 12). Real session-loss problem, but it belongs in a separate plan once the substrate from this rebuild is in place. The DockedPanel + URL state hook + LayerCatalog are all natural insertion points for "Saved views."
+
+**Where it slots in:** A new `SidebarSection` "Saved views" with `SidebarEntry` rows for each saved view. New backend table or filesystem store for view metadata (polygon coords, region, time, cloud, filename, optional name and notes). New `/api/views` CRUD endpoints. The DockedPanel gains a "Save view" action. The LayerCatalog can hold a "Saved view boundary" overlay layer.
+
+**Trigger to start:** After the layout rebuild lands and either (a) a real user reports losing work, or (b) the World Bank pilot demo plan calls for shareable saved analyses.
+
+---
+
+### 14. Don't reintroduce things that were deleted
 
 - `application/prototype.py` — Streamlit prototype, removed in v2. Any analyst workflows that lived there should be ported into the Next.js workbench, NOT resurrected.
 - `application/web/static/` and `application/web/templates/` — legacy vanilla JS frontend. Deleted at the end of Phase 2. The new frontend lives entirely in `application/web/server/`.

@@ -178,13 +178,15 @@ The legacy vanilla JS frontend (`application/web/static/` and `templates/`) was 
 
 ## Mandatory regression tests (Iron Rule)
 
-Seven tests that must remain green at all times. They lock load-bearing fixes against silent regression:
+Nine tests that must remain green at all times. They lock load-bearing fixes against silent regression:
 
 - **R1-R4** (backend, `tests/test_app.py`) — `OUTPUT_DIR` resolution is repo-root-anchored, env-overridable, and never CWD-relative
 - **R5-R6** (frontend, `app/components/MapView.test.tsx`) — `MapView` unmount calls `map.remove()`; mounting under `<StrictMode>` doesn't throw "Map container is already initialized"
 - **R7** (frontend, `app/hooks/usePolygonDraw.test.ts`) — `usePolygonDraw` cleanup detaches all map event listeners
+- **R8** (frontend, `app/components/ui/DockedPanel.test.tsx`) — `DockedPanel` mount/unmount under StrictMode without throwing; ESC keyboard listener is removed from `window` on unmount with the same handler reference. Added during the v2.5 nefos-primitives rebuild because the panel is the substrate for 3 mount sources (extraction / road inspector / welcome) and the ESC handler runs inside `useEffect`.
+- **R9** (frontend, `app/hooks/useMapEvent.test.ts`) — `useMapEvent(map, event, handler)` calls `map.off(event, handler)` with the SAME handler reference passed to `map.on()` during cleanup. The 4 map instruments (`CompassRose`, `MapScaleBar`, the hover handler, and any future map subscribers) all funnel through this hook, so a leak in the contract cascades silently. Mirrors R7 structure exactly.
 
-If you're ever tempted to delete or skip one of these, find the regression note in the plan file (`~/.claude/plans/cached-discovering-beaver.md`) first and understand why it exists.
+If you're ever tempted to delete or skip one of these, find the regression note in the plan file (`~/.claude/plans/cached-discovering-beaver.md` for R1-R7, `~/.gstack/projects/tsl-imperial-Sentinel-FYP/ceo-plans/2026-04-11-workbench-nefos-primitives.md` for R8/R9) first and understand why it exists.
 
 ## Out of scope (deferred)
 

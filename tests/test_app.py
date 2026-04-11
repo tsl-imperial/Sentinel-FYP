@@ -252,3 +252,79 @@ def test_overview_classes_constant_still_importable():
     assert hasattr(local_data, "OVERVIEW_CLASSES")
     assert isinstance(local_data.OVERVIEW_CLASSES, list)
     assert len(local_data.OVERVIEW_CLASSES) > 0
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# /api/road_indices — per-road Sentinel-2 indices for hover popup + click inspector
+# Backed by indices_for_osm_id_all_years() which uses the existing
+# (osm_id, year, quarter) MultiIndex on the parquet for O(log n) lookup.
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def test_road_indices_missing_osm_id_returns_400(client):
+    res = client.get("/api/road_indices")
+    assert res.status_code == 400
+    assert "osm_id" in res.get_json()["error"].lower()
+
+
+def test_road_indices_empty_osm_id_returns_400(client):
+    res = client.get("/api/road_indices?osm_id=")
+    assert res.status_code == 400
+
+
+def test_road_indices_non_numeric_returns_400(client):
+    res = client.get("/api/road_indices?osm_id=foo")
+    assert res.status_code == 400
+    assert "integer" in res.get_json()["error"].lower()
+
+
+def test_road_indices_negative_returns_400(client):
+    # `-1` fails the digits-only check (the minus sign is not a digit).
+    res = client.get("/api/road_indices?osm_id=-1")
+    assert res.status_code == 400
+
+
+def test_road_indices_too_large_returns_400(client):
+    # 2^53 + 1 = JS unsafe integer territory.
+    res = client.get("/api/road_indices?osm_id=9007199254740993")
+    assert res.status_code == 400
+    assert "range" in res.get_json()["error"].lower()
+
+
+def test_road_indices_unknown_osm_id_returns_empty_list(client):
+    """Road exists in OSM but never had indices computed → 200 with empty list,
+    NOT 404. The road exists; the indices just aren't there."""
+    res = client.get("/api/road_indices?osm_id=999999999999")
+    assert res.status_code == 200
+    body = res.get_json()
+    assert body["osm_id"] == "999999999999"
+    assert body["indices"] == []
+
+
+def test_indices_for_osm_id_all_years_returns_list_of_dicts():
+    """Direct call sanity: returns the right shape for any known osm_id, or []
+    for an unknown one. Doesn't depend on real parquet contents — just shape."""
+    from application.web import local_data
+    rows = local_data.indices_for_osm_id_all_years("999999999999")
+    assert rows == []
+
+
+def test_indices_for_osm_id_all_years_handles_known_id():
+    """If the parquet has any data, picking the first osm_id from it should
+    return at least one row with year/quarter and the 5 lowercase index keys."""
+    from application.web import local_data
+    df = local_data._load_indices()
+    if df.empty:
+        pytest.skip("parquet is empty in this checkout")
+    # Sample one osm_id from the MultiIndex
+    sample_osm_id = df.index.get_level_values("osm_id")[0]
+    rows = local_data.indices_for_osm_id_all_years(sample_osm_id)
+    assert len(rows) >= 1
+    row = rows[0]
+    assert "year" in row
+    assert "quarter" in row
+    for key in ("ndvi", "ndmi", "ndbi", "ndwi", "bsi"):
+        assert key in row, f"missing key {key}"
+    # Sorted most-recent first.
+    if len(rows) > 1:
+        assert (rows[0]["year"], rows[0]["quarter"]) >= (rows[1]["year"], rows[1]["quarter"])

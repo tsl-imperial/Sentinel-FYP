@@ -55,6 +55,15 @@ export const ROADS_SOURCE_ID = 'roads-pmtiles';
 const ROADS_SOURCE_LAYER = 'roads';
 
 /**
+ * The hit layer width controls how forgiving the click/hover targets are.
+ * 14px gives a ~7px halo around each road centerline, which makes
+ * residential roads (1px visible) pickable without the user having to hit
+ * a single pixel. The hit layers paint with `line-opacity: 0` so they're
+ * invisible — only their hit area matters.
+ */
+const HIT_LAYER_WIDTH = 14;
+
+/**
  * Layer ID convention: `roads-{fclass}`. Stable so the click handler can build
  * its `interactiveLayerIds` list and so visibility toggles can be applied via
  * map.setLayoutProperty(layerId, 'visibility', ...).
@@ -63,10 +72,32 @@ export function roadLayerId(fclass: string): string {
   return `roads-${fclass}`;
 }
 
-/** All road layer IDs in the order they appear in the style. */
+/** Hit-layer companion to roadLayerId — same source/filter, much wider,
+ *  fully transparent. interactiveLayerIds in MapView points at these. */
+export function roadHitLayerId(fclass: string): string {
+  return `roads-hit-${fclass}`;
+}
+
+/** All visible road layer IDs in the order they appear in the style. */
 export function allRoadLayerIds(palette: ClassPalette): string[] {
   return palette.order.map(roadLayerId);
 }
+
+/** All hit layer IDs. Use these for `interactiveLayerIds` so MapLibre's
+ *  click/hover targeting uses the wider hit halo instead of the visible
+ *  hairline. */
+export function allHitLayerIds(palette: ClassPalette): string[] {
+  return palette.order.map(roadHitLayerId);
+}
+
+/** Hover highlight layer — paints a slate-900 line on top of the visible
+ *  layers, filtered to the currently hovered osm_id. The MapView updates
+ *  the filter via map.setFilter() when hover state changes. */
+export const ROADS_HOVER_LAYER_ID = 'roads-hover-highlight';
+
+/** Sentinel value used in the hover layer's initial filter so it matches
+ *  no features. The MapView swaps the value at runtime via setFilter. */
+export const ROADS_HOVER_NEVER_MATCH = '__roads_hover_never_match__';
 
 /**
  * Build a complete MapLibre style spec containing the basemap raster source,
@@ -100,9 +131,31 @@ export function buildRoadStyle(palette: ClassPalette): StyleSpecification {
         minzoom: 0,
         maxzoom: 22,
       },
-      // One line layer per road class. The order in palette.order controls
-      // paint order — earlier entries paint underneath later ones, so put
-      // residential first and trunk/primary last to keep big roads on top.
+      // Per-class HIT layers — invisible (line-opacity: 0), wide (14px),
+      // beneath the visible road layers. interactiveLayerIds in MapView
+      // points at these so click and hover hit-detection uses the wider
+      // halo instead of forcing the user to pixel-hunt the hairline. The
+      // visible layers above paint OVER these so the user never sees them.
+      ...palette.order.map((fclass) => ({
+        id: roadHitLayerId(fclass),
+        type: 'line' as const,
+        source: ROADS_SOURCE_ID,
+        'source-layer': ROADS_SOURCE_LAYER,
+        filter: ['==', ['get', 'fclass'], fclass] as ['==', ['get', string], string],
+        paint: {
+          'line-color': '#000',
+          'line-opacity': 0,
+          'line-width': HIT_LAYER_WIDTH,
+        },
+        layout: {
+          'line-cap': 'round',
+          'line-join': 'round',
+        },
+      })),
+      // One VISIBLE line layer per road class. The order in palette.order
+      // controls paint order — earlier entries paint underneath later ones,
+      // so put residential first and trunk/primary last to keep big roads
+      // on top.
       ...palette.order.map((fclass) => {
         const baseWidth = BASE_WIDTH[fclass] ?? 1;
         return {
@@ -135,6 +188,26 @@ export function buildRoadStyle(palette: ClassPalette): StyleSpecification {
           },
         };
       }),
+      // Hover highlight layer — paints on top of the visible road layers
+      // when the filter matches the currently hovered osm_id. Initial
+      // filter matches nothing; MapView updates it via setFilter() on
+      // hover state change.
+      {
+        id: ROADS_HOVER_LAYER_ID,
+        type: 'line' as const,
+        source: ROADS_SOURCE_ID,
+        'source-layer': ROADS_SOURCE_LAYER,
+        filter: ['==', ['get', 'osm_id'], ROADS_HOVER_NEVER_MATCH] as ['==', ['get', string], string],
+        paint: {
+          'line-color': '#0f172a',
+          'line-width': 4,
+          'line-opacity': 0.9,
+        },
+        layout: {
+          'line-cap': 'round',
+          'line-join': 'round',
+        },
+      },
     ],
   } as StyleSpecification;
 }

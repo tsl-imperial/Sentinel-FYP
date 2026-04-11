@@ -37,6 +37,13 @@ vi.mock('maplibre-gl', () => ({
 // don't try to load a real CSS file through jsdom.
 vi.mock('maplibre-gl/dist/maplibre-gl.css', () => ({}));
 
+// Mock useRoadIndices because MapView's hover popup uses TanStack Query.
+// R5/R6 only care about the map mount/unmount contract, not the indices
+// fetch path. Without this mock the test would need a QueryClientProvider.
+vi.mock('@/hooks/useRoadIndices', () => ({
+  useRoadIndices: () => ({ data: undefined, isLoading: false, error: null }),
+}));
+
 // Mock react-map-gl/maplibre with a Map that uses an effect to call its
 // `ref` prop with an instance on mount and `null` on unmount — this matches
 // the real library's lifecycle so R5 can assert the unmount cleanup.
@@ -95,6 +102,8 @@ describe('MapView (R5/R6)', () => {
         enabled={{}}
         boundary={null}
         onMapReady={onMapReady}
+        currentYear={2024}
+        currentQuarter="Jul–Sep"
       />,
     );
 
@@ -123,6 +132,8 @@ describe('MapView (R5/R6)', () => {
             enabled={{}}
             boundary={null}
             onMapReady={onMapReady}
+            currentYear={2024}
+        currentQuarter="Jul–Sep"
           />
         </StrictMode>,
       );

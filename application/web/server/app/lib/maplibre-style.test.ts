@@ -2,8 +2,12 @@ import { describe, it, expect } from 'vitest';
 import {
   buildRoadStyle,
   roadLayerId,
+  roadHitLayerId,
   allRoadLayerIds,
+  allHitLayerIds,
   ROADS_SOURCE_ID,
+  ROADS_HOVER_LAYER_ID,
+  ROADS_HOVER_NEVER_MATCH,
   PMTILES_URL,
   FALLBACK_ROAD_COLOR,
 } from './maplibre-style';
@@ -40,13 +44,43 @@ describe('buildRoadStyle', () => {
     expect((roads as { url: string }).url).toBe(PMTILES_URL);
   });
 
-  it('paints basemap first, then one road layer per palette entry', () => {
+  it('paints basemap first, then per-class hit + visible layers, then hover highlight on top', () => {
     const style = buildRoadStyle(PALETTE);
     const first = style.layers[0];
     expect(first?.id).toBe('basemap');
     expect(first?.type).toBe('raster');
-    // 1 basemap + 7 road classes = 8 layers
-    expect(style.layers).toHaveLength(8);
+    // 1 basemap + 7 hit + 7 visible + 1 hover highlight = 16 layers
+    expect(style.layers).toHaveLength(16);
+    // Hit layers come BEFORE visible layers (so visible paints over invisible).
+    const hitIdx = style.layers.findIndex((l) => l.id === roadHitLayerId('trunk'));
+    const visIdx = style.layers.findIndex((l) => l.id === roadLayerId('trunk'));
+    expect(hitIdx).toBeGreaterThan(0);
+    expect(visIdx).toBeGreaterThan(hitIdx);
+    // Hover highlight is the very last layer so it paints on top.
+    const lastLayer = style.layers[style.layers.length - 1];
+    expect(lastLayer?.id).toBe(ROADS_HOVER_LAYER_ID);
+  });
+
+  it('hit layers are invisible (line-opacity 0) and 14px wide', () => {
+    const style = buildRoadStyle(PALETTE);
+    for (const fclass of PALETTE.order) {
+      const layer = style.layers.find((l) => l.id === roadHitLayerId(fclass));
+      expect(layer, `hit layer for ${fclass} missing`).toBeDefined();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const paint = (layer as any).paint;
+      expect(paint['line-opacity']).toBe(0);
+      expect(paint['line-width']).toBe(14);
+    }
+  });
+
+  it('hover highlight layer starts with a never-match filter', () => {
+    const style = buildRoadStyle(PALETTE);
+    const hover = style.layers.find((l) => l.id === ROADS_HOVER_LAYER_ID);
+    expect(hover).toBeDefined();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const filter = (hover as any).filter;
+    expect(filter[0]).toBe('==');
+    expect(filter[2]).toBe(ROADS_HOVER_NEVER_MATCH);
   });
 
   it('binds each road layer line-color to the palette entry for its fclass', () => {
@@ -105,6 +139,20 @@ describe('allRoadLayerIds', () => {
       'roads-secondary',
       'roads-trunk',
       'roads-primary',
+    ]);
+  });
+});
+
+describe('allHitLayerIds', () => {
+  it('returns one hit layer ID per palette entry in palette order', () => {
+    expect(allHitLayerIds(PALETTE)).toEqual([
+      'roads-hit-residential',
+      'roads-hit-service',
+      'roads-hit-unclassified',
+      'roads-hit-tertiary',
+      'roads-hit-secondary',
+      'roads-hit-trunk',
+      'roads-hit-primary',
     ]);
   });
 });

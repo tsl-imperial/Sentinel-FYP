@@ -25,6 +25,13 @@ const sentinelMeanSchema = z.record(z.string(), z.number().nullable()).nullable(
 
 export const exportResponseSchema = z.object({
   status: z.literal('ok'),
+  /** True when osmnx succeeded but the Sentinel-2 reduction failed (e.g.,
+   *  Earth Engine not initialized, GEE timeout). The network outputs are
+   *  still persisted and the road metrics are valid; only sentinel_mean
+   *  will be null. The frontend renders this as a warning toast instead of
+   *  the success toast. */
+  degraded: z.boolean().optional(),
+  degraded_reason: z.string().optional(),
   links: z
     .object({
       mapillary: z.string().url().optional(),

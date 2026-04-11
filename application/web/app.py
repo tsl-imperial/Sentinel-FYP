@@ -10,6 +10,7 @@ import os
 import json
 import pickle
 from pathlib import Path
+from typing import Any
 from dotenv import load_dotenv
 import ee
 import geopandas as gpd
@@ -112,6 +113,39 @@ def region_info():
         return jsonify({"error": "region not found"}), 404
     except FileNotFoundError as exc:
         return jsonify({"error": str(exc), "status": "data_missing"}), 503
+
+
+@app.get("/api/road_indices")
+def road_indices():
+    """Per-road Sentinel-2 indices across all years/quarters.
+
+    Used by the workbench hover popup (filters client-side to current
+    TimeSlider year) and the click-to-dock road inspector (shows all years).
+    Both surfaces hit this single endpoint to keep the API surface minimal.
+
+    Validates `osm_id` as digits-only and bounds it to `1 < osm_id < 2^53`
+    to stay inside the JS safe-integer range. Returns `200 {osm_id, indices: []}`
+    when the road has no parquet entry — NOT 404 — because the road exists in
+    OSM, the indices just aren't computed for it. The frontend falls back to
+    a "(no indices)" footnote per the design review.
+    """
+    raw = request.args.get("osm_id", "").strip()
+    if not raw:
+        return jsonify({"error": "osm_id is required"}), 400
+    if not raw.isdigit():
+        return jsonify({"error": "osm_id must be a positive integer"}), 400
+    try:
+        osm_id_int = int(raw)
+    except ValueError:
+        return jsonify({"error": "osm_id must be a positive integer"}), 400
+    if osm_id_int <= 0 or osm_id_int >= 2**53:
+        return jsonify({"error": "osm_id out of range"}), 400
+
+    try:
+        rows = local_data.indices_for_osm_id_all_years(raw)
+    except FileNotFoundError as exc:
+        return jsonify({"error": str(exc), "status": "data_missing"}), 503
+    return jsonify({"osm_id": raw, "indices": rows})
 
 
 @app.get("/api/class_palette")
@@ -426,11 +460,24 @@ def export_polygon_network_s2():
     payload, total_road_km = build_igraph_payload(clipped_edges, nodes_gdf)
 
     # Sentinel-2 mean features over buffered road corridor.
-    try:
-        roads_buffer = clipped_edges.to_crs("EPSG:3857").buffer(buffer_m).to_crs("EPSG:4326").unary_union
-        ee_geom = ee.Geometry(mapping(roads_buffer))
-        start_date, end_date = quarter_to_dates(year, quarter)
+    #
+    # IMPORTANT: only the EARTH ENGINE calls are allowed to fail. Pure
+    # geopandas/shapely operations (CRS conversion, buffer, unary_union)
+    # and the pure-Python date helper run BEFORE the try block — failures
+    # there are real bugs that should surface as a 500 with a stack trace,
+    # not be silently masked as `degraded: true`. The narrow try wraps only
+    # the operations that legitimately depend on Earth Engine being
+    # initialized and reachable. `ee.Geometry(...)` stays inside the try
+    # because the EE client may raise on its constructor when no project
+    # context is set (NETINSPECT_SKIP_EE_INIT=1).
+    roads_buffer = clipped_edges.to_crs("EPSG:3857").buffer(buffer_m).to_crs("EPSG:4326").unary_union
+    start_date, end_date = quarter_to_dates(year, quarter)
 
+    stats: dict[str, Any] | None = None
+    degraded = False
+    degraded_reason: str | None = None
+    try:
+        ee_geom = ee.Geometry(mapping(roads_buffer))
         s2 = (
             ee.ImageCollection("COPERNICUS/S2_SR_HARMONIZED")
             .filterBounds(ee_geom)
@@ -452,9 +499,15 @@ def export_polygon_network_s2():
             bestEffort=True,
         ).getInfo()
     except Exception as exc:
-        return jsonify({"error": f"Sentinel extraction failed: {exc}"}), 500
+        # Degraded mode: keep the network outputs, drop Sentinel.
+        stats = None
+        degraded = True
+        degraded_reason = f"Sentinel extraction failed: {exc}"
+        app.logger.warning("Sentinel reduction failed for %s: %s", safe_filename, exc)
 
-    # Persist outputs.
+    # Persist outputs. Network artifacts always; Sentinel JSON only when we
+    # actually have stats (no point writing an empty {} that would imply
+    # success).
     pkl_path = OUTPUT_DIR / f"{safe_filename}_network.pkl"
     edges_path = OUTPUT_DIR / f"{safe_filename}_network_edges.geojson"
     s2_path = OUTPUT_DIR / f"{safe_filename}_sentinel_stats.json"
@@ -462,10 +515,19 @@ def export_polygon_network_s2():
     with open(pkl_path, "wb") as f:
         pickle.dump(payload, f)
     geojson_edges.to_file(edges_path, driver="GeoJSON")
-    with open(s2_path, "w", encoding="utf-8") as f:
-        json.dump(stats, f, indent=2)
+    if stats is not None:
+        with open(s2_path, "w", encoding="utf-8") as f:
+            json.dump(stats, f, indent=2)
+    else:
+        # Degraded mode: ensure no stale sentinel JSON from a previous successful
+        # run with the same filename remains. Without this, /api/exports would
+        # group the stale Sentinel JSON with the new degraded network artifacts
+        # and the user would see misleading "indices available" links on the
+        # exports page.
+        if s2_path.exists():
+            s2_path.unlink()
 
-    return jsonify({
+    response: dict[str, Any] = {
         "status": "ok",
         "links": {
             "mapillary": mapillary_url,
@@ -476,7 +538,6 @@ def export_polygon_network_s2():
         "files": {
             "network_pickle": str(pkl_path),
             "edges_geojson": str(edges_path),
-            "sentinel_stats_json": str(s2_path),
         },
         "summary": {
             "node_count": int(payload["igraph_graph"].vcount()),
@@ -489,4 +550,10 @@ def export_polygon_network_s2():
             "buffer_m": buffer_m,
             "sentinel_mean": stats,
         },
-    })
+    }
+    if stats is not None:
+        response["files"]["sentinel_stats_json"] = str(s2_path)
+    if degraded:
+        response["degraded"] = True
+        response["degraded_reason"] = degraded_reason
+    return jsonify(response)
