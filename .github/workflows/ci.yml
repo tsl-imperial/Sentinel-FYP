@@ -21,6 +21,9 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
+      - name: Verify parquet engine
+        run: |
+          python -c "import pyarrow; import pandas as pd; print('pyarrow ok', pyarrow.__version__)"
       - name: Run pytest
         run: pytest -v
 
