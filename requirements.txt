@@ -7,10 +7,10 @@ geopandas==1.1.2
 igraph==0.11.9
 networkx==3.5
 osmnx==2.0.6
-pandas==3.0.1
+pandas>=2.2,<2.3
 pyproj==3.7.1
 rtree==1.4.1
 Shapely==2.1.2
 # dev — extracted to requirements-dev.txt later if the deploy story splits
-pyarrow==17.0.0
+pyarrow>=16,<17
 pytest==8.3.4
