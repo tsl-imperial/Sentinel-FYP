@@ -48,3 +48,5 @@ coverage/
 
 # Tippecanoe SQLite WAL leftover (the .pmtiles file itself IS committed)
 *.pmtiles-journal
+*.docx
+*.pdf
