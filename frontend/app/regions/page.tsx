@@ -12,6 +12,11 @@ function classLabel(cls: string): string {
   return cls.charAt(0).toUpperCase() + cls.slice(1).replace(/_/g, ' ');
 }
 
+const SURFACE_COLORS: Record<string, string> = {
+  paved: '#3B6EA8',
+  unpaved: '#C96B3C',
+};
+
 export default function RegionsPage() {
   const { data, isLoading, error } = useRegionsDetails();
 
@@ -112,6 +117,14 @@ function RegionCard({
       return { cls, km, pct: totalKm > 0 ? (km / totalKm) * 100 : 0 };
     })
     .filter((r) => r.km > 0);
+  const surfaceOrder = ['paved', 'unpaved'];
+  const surfaceTotalKm = surfaceOrder.reduce((s, surface) => s + (region.surface_composition?.[surface] ?? 0), 0);
+  const surfaceRows = surfaceOrder
+    .map((surface) => {
+      const km = region.surface_composition?.[surface] ?? 0;
+      return { surface, km, pct: surfaceTotalKm > 0 ? (km / surfaceTotalKm) * 100 : 0 };
+    })
+    .filter((r) => r.km > 0);
 
   return (
     <Link
@@ -158,6 +171,36 @@ function RegionCard({
           </span>
         </div>
       ))}
+
+      <div className="mt-5 border-t border-slate-100 pt-4">
+        <div className="label mb-2">Predicted surface</div>
+        {surfaceRows.length === 0 ? (
+          <div className="text-[11px] text-slate-400">No Layer 1 prediction data</div>
+        ) : (
+          <>
+            <div className="h-2.5 w-full overflow-hidden bg-slate-100 flex mb-3 border border-slate-200">
+              {surfaceRows.map((r) => (
+                <div
+                  key={r.surface}
+                  className="h-full"
+                  style={{ width: `${r.pct}%`, background: SURFACE_COLORS[r.surface] }}
+                  title={`${classLabel(r.surface)}: ${r.pct.toFixed(1)}% (${r.km.toFixed(0)} km)`}
+                />
+              ))}
+            </div>
+            {surfaceRows.map((r) => (
+              <div key={r.surface} className="flex items-center gap-2 text-[11px] py-0.5">
+                <span className="w-2 h-2 flex-shrink-0" style={{ background: SURFACE_COLORS[r.surface] }} />
+                <span className="text-slate-600 flex-1">{classLabel(r.surface)}</span>
+                <span className="num text-slate-700 w-8 text-right">{r.pct.toFixed(0)}%</span>
+                <span className="num text-slate-400 w-16 text-right">
+                  {r.km.toLocaleString(undefined, { maximumFractionDigits: 0 })} km
+                </span>
+              </div>
+            ))}
+          </>
+        )}
+      </div>
     </Link>
   );
 }

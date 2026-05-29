@@ -145,7 +145,8 @@ def road_indices():
         rows = local_data.indices_for_osm_id_all_years(raw)
     except FileNotFoundError as exc:
         return jsonify({"error": str(exc), "status": "data_missing"}), 503
-    return jsonify({"osm_id": raw, "indices": rows})
+    prediction = local_data.layer1_prediction_for_osm_id(raw)
+    return jsonify({"osm_id": raw, "indices": rows, "prediction": prediction})
 
 
 @app.get("/api/class_palette")

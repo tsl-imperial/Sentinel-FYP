@@ -20,8 +20,19 @@ export const roadIndicesEntrySchema = z.object({
 });
 export type RoadIndicesEntry = z.infer<typeof roadIndicesEntrySchema>;
 
+export const roadPredictionSchema = z.object({
+  pred_surface: z.enum(['paved', 'unpaved']).nullable(),
+  prob_paved: z.number().nullable(),
+  prob_unpaved: z.number().nullable(),
+  confidence: z.number().nullable(),
+  low_confidence: z.boolean().nullable(),
+  is_labelled_train_road: z.boolean().nullable(),
+});
+export type RoadPrediction = z.infer<typeof roadPredictionSchema>;
+
 export const roadIndicesSchema = z.object({
   osm_id: z.string(),
   indices: z.array(roadIndicesEntrySchema),
+  prediction: roadPredictionSchema.nullable().optional(),
 });
 export type RoadIndices = z.infer<typeof roadIndicesSchema>;

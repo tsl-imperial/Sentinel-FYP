@@ -12,6 +12,8 @@ export const regionSummarySchema = z.object({
   edge_count: z.number().int(),
   area_km2: z.number(),
   class_composition: z.record(z.string(), z.number()),
+  surface_composition: z.record(z.string(), z.number()).optional(),
+  surface_count: z.record(z.string(), z.number()).optional(),
 });
 
 export const classPaletteSchema = z.object({

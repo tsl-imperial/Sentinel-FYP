@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useRoadIndices } from '@/hooks/useRoadIndices';
 import { formatIndex } from '@/lib/format';
-import type { RoadIndicesEntry } from '@/lib/schemas/roadIndices';
+import type { RoadIndicesEntry, RoadPrediction } from '@/lib/schemas/roadIndices';
 
 /**
  * RoadInspector — docked road detail panel.
@@ -29,6 +29,7 @@ export function RoadInspector({ osmId, name, fclass, color, currentYear }: RoadI
   const query = useRoadIndices(osmId);
 
   const list = query.data?.indices ?? [];
+  const prediction = query.data?.prediction ?? null;
   const visibleRows = lockToSlider ? list.filter((r) => r.year === currentYear) : list;
 
   return (
@@ -53,6 +54,8 @@ export function RoadInspector({ osmId, name, fclass, color, currentYear }: RoadI
         />
         <span>Lock to time slider ({currentYear})</span>
       </label>
+
+      <Layer1PredictionCard prediction={prediction} isLoading={query.isLoading} />
 
       {/* Indices table */}
       <div>
@@ -89,6 +92,72 @@ export function RoadInspector({ osmId, name, fclass, color, currentYear }: RoadI
       </div>
     </div>
   );
+}
+
+function Layer1PredictionCard({
+  prediction,
+  isLoading,
+}: {
+  prediction: RoadPrediction | null;
+  isLoading: boolean;
+}) {
+  const surface = prediction?.pred_surface;
+  const confidence = prediction?.confidence;
+  const isPaved = surface === 'paved';
+  const label = surface ? surface.charAt(0).toUpperCase() + surface.slice(1) : 'Unavailable';
+  const surfaceColor = isPaved ? '#3B6EA8' : '#C96B3C';
+
+  return (
+    <div className="border border-slate-200 rounded-md bg-slate-50/70 p-3">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <div className="text-[10px] uppercase tracking-[0.15em] text-slate-500 font-semibold">
+            Layer 1 prediction
+          </div>
+          {isLoading ? (
+            <div className="mt-2 text-[11px] text-slate-400">Loading prediction…</div>
+          ) : !prediction || !surface ? (
+            <div className="mt-2 text-[11px] text-slate-400">No prediction available</div>
+          ) : (
+            <>
+              <div className="mt-2 flex items-center gap-2">
+                <span className="inline-block size-2.5 rounded-full" style={{ backgroundColor: surfaceColor }} />
+                <span className="text-sm font-semibold text-slate-900">{label}</span>
+                {prediction.low_confidence && (
+                  <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-800">
+                    Low confidence
+                  </span>
+                )}
+              </div>
+              <div className="mt-2 grid grid-cols-3 gap-2 text-[11px]">
+                <Metric label="Confidence" value={formatPercent(confidence)} />
+                <Metric label="Paved" value={formatPercent(prediction.prob_paved)} />
+                <Metric label="Unpaved" value={formatPercent(prediction.prob_unpaved)} />
+              </div>
+              {prediction.is_labelled_train_road === false && (
+                <div className="mt-2 text-[10px] leading-snug text-slate-500">
+                  Full-network prediction, outside the labelled training subset.
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Metric({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <div className="text-[9px] uppercase tracking-[0.12em] text-slate-400">{label}</div>
+      <div className="num mt-0.5 text-xs font-semibold text-slate-800">{value}</div>
+    </div>
+  );
+}
+
+function formatPercent(value: number | null | undefined): string {
+  return value == null ? '—' : `${Math.round(value * 100)}%`;
 }
 
 function RoadInspectorRow({ row }: { row: RoadIndicesEntry }) {
